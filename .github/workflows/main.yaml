@@ -1,0 +1,25 @@
+name: Publish Main
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: acorn-io/actions-setup@v1
+        with:
+          token: ${{secrets.ACORN_TOKEN}}
+      - uses: acorn-io/actions-login@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor}}
+          password: ${{secrets.GITHUB_TOKEN }}
+      - name: Build & Push
+        run: |
+          echo "Pushing to ghcr.io/${{github.repository}}:latest"
+          acorn build -t ghcr.io/${{github.repository}}:latest .
+          acorn push ghcr.io/${{github.repository}}:latest
+
