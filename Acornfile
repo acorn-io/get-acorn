@@ -1,0 +1,13 @@
+args: {
+  // Number of NGINX instances to run
+  replicas: 1
+}
+
+containers: web: {
+  build: {
+    context: "."
+  }
+
+  scale:  args.replicas
+  ports: publish: "80/http"
+}
