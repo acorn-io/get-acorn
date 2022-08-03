@@ -91,7 +91,7 @@ setup_env() {
   fi
 
   INSTALL_ACORN_CHANNEL_URL=${INSTALL_ACORN_CHANNEL_URL:-'https://update.acrn.io/v1-release/channels'}
-  INSTALL_ACORN_CHANNEL=${INSTALL_ACORN_CHANNEL:-'testing'}
+  INSTALL_ACORN_CHANNEL=${INSTALL_ACORN_CHANNEL:-'latest'}
 }
 
 # --- check if skip download environment variable set ---
