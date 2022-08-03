@@ -10,8 +10,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: acorn-io/actions-setup@v1
-        with:
-          token: ${{secrets.ACORN_TOKEN}}
       - uses: acorn-io/actions-login@v1
         with:
           registry: ghcr.io
