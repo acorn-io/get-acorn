@@ -37,7 +37,7 @@ set -o noglob
 #
 #   - INSTALL_ACORN_CHANNEL_URL
 #   Channel URL for fetching acorn download URL.
-#   Defaults to 'https://update.acorn.io/v1-release/channels'.
+#   Defaults to 'https://update.acrn.io/v1-release/channels'.
 #
 #   - INSTALL_ACORN_CHANNEL
 #   Channel to use for fetching acorn download URL.
@@ -48,6 +48,7 @@ STORAGE_URL=https://cdn.acrn.io/cli
 DOWNLOADER=
 ARCH=
 SUFFIX=
+EXT=
 SUDO=sudo
 
 # --- helper functions for logs ---
@@ -89,8 +90,8 @@ setup_env() {
     INSTALL_ACORN_SKIP_DOWNLOAD=true
   fi
 
-  INSTALL_ACORN_CHANNEL_URL=${INSTALL_ACORN_CHANNEL_URL:-'https://update.acorn.io/v1-release/channels'}
-  INSTALL_ACORN_CHANNEL=${INSTALL_ACORN_CHANNEL:-'stable'}
+  INSTALL_ACORN_CHANNEL_URL=${INSTALL_ACORN_CHANNEL_URL:-'https://update.acrn.io/v1-release/channels'}
+  INSTALL_ACORN_CHANNEL=${INSTALL_ACORN_CHANNEL:-'testing'}
 }
 
 # --- check if skip download environment variable set ---
@@ -111,37 +112,47 @@ verify_acorn_is_executable() {
 setup_verify_arch() {
   if [ -z "$ARCH" ]; then
     PLATFORM=$(uname)
-    if [ "${PLATFORM}" = "Darwin" ]; then
-      ARCH=universal
-      SUFFIX=-${ARCH}
-      return 0
-    fi
+    EXT=".tar.gz"
+
+    case $PLATFORM in
+      Linux)
+        PLATFORM="linux"
+        ;;
+      Darwin)
+        PLATFORM="macOS"
+        ARCH=universal
+        ;;
+      Windows)
+        PLATFORM="windows"
+        EXT=".zip"
+        ;;
+      *)
+        fatal "Unsupported platform $PLATFORM"
+    esac
   fi
 
   if [ -z "$ARCH" ]; then
     ARCH=$(uname -m)
+
+    case $ARCH in
+      amd64)
+        ARCH=amd64
+        ;;
+      x86_64)
+        ARCH=amd64
+        ;;
+      arm64)
+        ARCH=arm64
+        ;;
+      aarch64)
+        ARCH=arm64
+        ;;
+      *)
+        fatal "Unsupported architecture $ARCH"
+    esac
   fi
 
-  case $ARCH in
-    amd64)
-      ARCH=amd64
-      SUFFIX=
-      ;;
-    x86_64)
-      ARCH=amd64
-      SUFFIX=
-      ;;
-    arm64)
-      ARCH=arm64
-      SUFFIX=-${ARCH}
-      ;;
-    aarch64)
-      ARCH=arm64
-      SUFFIX=-${ARCH}
-      ;;
-    *)
-      fatal "Unsupported architecture $ARCH"
-  esac
+  SUFFIX=-${PLATFORM}-${ARCH}
 }
 
 # --- verify existence of network downloader executable ---
@@ -158,7 +169,7 @@ verify_downloader() {
 setup_tmp() {
   TMP_DIR=$(mktemp -d -t acorn-install.XXXXXXXXXX)
   TMP_HASH=${TMP_DIR}/acorn.hash
-  TMP_BIN=${TMP_DIR}/acorn.bin
+  TMP_ARCHIVE=${TMP_DIR}/acorn${EXT}
   cleanup() {
     code=$?
     set +e
@@ -218,11 +229,11 @@ download_hash() {
   if [ -n "${INSTALL_ACORN_COMMIT}" ]; then
     HASH_URL=${STORAGE_URL}/acorn${SUFFIX}-${INSTALL_ACORN_COMMIT}.sha256sum
   else
-    HASH_URL=${GITHUB_URL}/download/${VERSION_ACORN}/sha256sum-${ARCH}.txt
+    HASH_URL=${GITHUB_URL}/download/${VERSION_ACORN}/checksums.txt
   fi
   info "Downloading hash ${HASH_URL}"
   download ${TMP_HASH} ${HASH_URL}
-  HASH_EXPECTED=$(grep " acorn${SUFFIX}$" ${TMP_HASH})
+  HASH_EXPECTED=$(grep " acorn-${VERSION_ACORN}${SUFFIX}${EXT}" ${TMP_HASH})
   HASH_EXPECTED=${HASH_EXPECTED%%[[:blank:]]*}
 }
 
@@ -238,32 +249,42 @@ installed_hash_matches() {
   return 1
 }
 
-# --- download binary from github url ---
-download_binary() {
+# --- download archive from github url ---
+download_archive() {
   if [ -n "${INSTALL_ACORN_COMMIT}" ]; then
-    BIN_URL=${STORAGE_URL}/acorn${SUFFIX}-${INSTALL_ACORN_COMMIT}
+    ARCHIVE_URL=${STORAGE_URL}/acorn${SUFFIX}-${INSTALL_ACORN_COMMIT}${EXT}
   else
-    BIN_URL=${GITHUB_URL}/download/${VERSION_ACORN}/acorn${SUFFIX}
+    ARCHIVE_URL=${GITHUB_URL}/download/${VERSION_ACORN}/acorn-${VERSION_ACORN}${SUFFIX}${EXT}
   fi
-  info "Downloading binary ${BIN_URL}"
-  download ${TMP_BIN} ${BIN_URL}
+  info "Downloading archive ${ARCHIVE_URL}"
+  download ${TMP_ARCHIVE} ${ARCHIVE_URL}
 }
 
-# --- verify downloaded binary hash ---
-verify_binary() {
+# --- verify downloaded archive hash ---
+verify_archive() {
   info "Verifying binary download"
-  HASH_BIN=$(shasum -a 256 ${TMP_BIN})
+  HASH_BIN=$(shasum -a 256 ${TMP_ARCHIVE})
   HASH_BIN=${HASH_BIN%%[[:blank:]]*}
   if [ "${HASH_EXPECTED}" != "${HASH_BIN}" ]; then
     fatal "Download sha256 does not match ${HASH_EXPECTED}, got ${HASH_BIN}"
   fi
 }
 
+expand_archive() {
+  if [ "${EXT}" = ".zip" ]; then
+    unzip ${TMP_ARCHIVE} -d ${TMP_DIR}
+  else
+    tar xzf ${TMP_ARCHIVE} -C ${TMP_DIR}
+  fi
+
+  TMP_BIN=${TMP_DIR}/acorn
+}
+
 # --- setup permissions and move binary to system directory ---
 setup_binary() {
-  chmod 775 ${TMP_BIN}
+  chmod 755 ${TMP_BIN}
   info "Installing acorn to ${BIN_DIR}/acorn"
-  $SUDO chown root:root ${TMP_BIN}
+  $SUDO chown root ${TMP_BIN}
   $SUDO mv -f ${TMP_BIN} ${BIN_DIR}/acorn
 }
 
@@ -286,8 +307,9 @@ download_and_verify() {
     return
   fi
 
-  download_binary
-  verify_binary
+  download_archive
+  verify_archive
+  expand_archive
   setup_binary
 }
 
