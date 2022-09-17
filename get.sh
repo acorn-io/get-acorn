@@ -46,6 +46,7 @@ set -o noglob
 GITHUB_URL=https://github.com/acorn-io/acorn/releases
 STORAGE_URL=https://cdn.acrn.io/cli
 DOWNLOADER=
+SHA=
 ARCH=
 SUFFIX=
 EXT=
@@ -165,6 +166,23 @@ verify_downloader() {
   return 0
 }
 
+verify_sha() {
+  # Return failure if it doesn't exist or is no executable
+  [ -x "$(command -v $1)" ] || return 1
+
+  # Set verified executable as our sha program and return success
+  SHA=$1
+  return 0
+}
+
+get_sha() {
+  if [ "${SHA}" = "shasum" ]; then
+    $SHA -a 256 $1
+  else
+    $SHA $1
+  fi
+}
+
 # --- create temporary directory and cleanup when done ---
 setup_tmp() {
   TMP_DIR=$(mktemp -d -t acorn-install.XXXXXXXXXX)
@@ -240,7 +258,7 @@ download_hash() {
 # --- check hash against installed version ---
 installed_hash_matches() {
   if [ -x ${BIN_DIR}/acorn ]; then
-    HASH_INSTALLED=$(shasum -a 256 ${BIN_DIR}/acorn)
+    HASH_INSTALLED=$(get_sha "${BIN_DIR}/acorn")
     HASH_INSTALLED=${HASH_INSTALLED%%[[:blank:]]*}
     if [ "${HASH_EXPECTED}" = "${HASH_INSTALLED}" ]; then
       return
@@ -263,7 +281,7 @@ download_archive() {
 # --- verify downloaded archive hash ---
 verify_archive() {
   info "Verifying binary download"
-  HASH_BIN=$(shasum -a 256 ${TMP_ARCHIVE})
+  HASH_BIN=$(get_sha $TMP_ARCHIVE)
   HASH_BIN=${HASH_BIN%%[[:blank:]]*}
   if [ "${HASH_EXPECTED}" != "${HASH_BIN}" ]; then
     fatal "Download sha256 does not match ${HASH_EXPECTED}, got ${HASH_BIN}"
@@ -298,6 +316,7 @@ download_and_verify() {
 
   setup_verify_arch
   verify_downloader curl || verify_downloader wget || fatal 'Can not find curl or wget for downloading files'
+  verify_sha sha256sum || verify_sha shasum || fatal 'Can not find sha256sum or shasum for verifying files'
   setup_tmp
   get_release_version
   download_hash
@@ -311,11 +330,6 @@ download_and_verify() {
   verify_archive
   expand_archive
   setup_binary
-}
-
-# --- get hashes of the current acorn bin and service files
-get_installed_hashes() {
-  $SUDO shasum -a 256 ${BIN_DIR}/acorn ${FILE_ACORN_SERVICE} ${FILE_ACORN_ENV} 2>&1 || true
 }
 
 # --- run the install process --
