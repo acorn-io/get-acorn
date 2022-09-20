@@ -1,0 +1,29 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: acorn-io/actions-setup@v1
+      - uses: acorn-io/actions-login@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor}}
+          password: ${{secrets.GITHUB_TOKEN }}
+      - name: Set Tag
+        run: |
+          echo "TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - name: Build & Push
+        run: |
+          echo "Pushing to ghcr.io/${{github.repository}}:$TAG"
+          acorn build --push -t ghcr.io/${{github.repository}}:$TAG .
