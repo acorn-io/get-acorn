@@ -292,6 +292,7 @@ expand_archive() {
   if [ "${EXT}" = ".zip" ]; then
     unzip ${TMP_ARCHIVE} -d ${TMP_DIR}
   else
+    unset TAR_OPTIONS # ensure tar operates with default settings
     tar xzf ${TMP_ARCHIVE} -C ${TMP_DIR}
   fi
 
